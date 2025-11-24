@@ -23,7 +23,7 @@ parser.add_argument("--embedding_dim", type=int, default=64) # Check
 parser.add_argument("--n_embeddings", type=int, default=512) # Check
 parser.add_argument("--beta", type=float, default=0.25) # Check
 parser.add_argument("--learning_rate", type=float, default=3e-4) # Check
-parser.add_argument("--log_interval", type=int, default=50)
+parser.add_argument("--log_interval", type=int, default=100)
 parser.add_argument("--dataset",  type=str, default='CIFAR10') # Check
 
 # whether or not to save model
@@ -37,7 +37,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if args.save:
     print('Results will be saved in ./results/vqvae_' + args.filename + '.pt')
 
-""" 
+"""
 Load data and define batch data loaders
 """
 
@@ -69,14 +69,14 @@ def train():
 
 
     while results['n_updates'] < args.n_updates:
-        
+
         for x, _ in training_loader:
 
             # This only gives the first batch of data each time?
             x = x.to(device)
             optimizer.zero_grad()
 
-            # Hmm x is coming from the training_loader and is never normalised? 
+            # Hmm x is coming from the training_loader and is never normalised?
             # Original converts images to floating point with range [-0.5, 0.5]
             embedding_loss, x_hat, perplexity = model(x)
             recon_loss = torch.mean((x_hat - x)**2) / x_train_var
@@ -104,7 +104,7 @@ def train():
                     'Loss', np.mean(results["loss_vals"][-args.log_interval:]),
                     'Perplexity:', np.mean(results["perplexities"][-args.log_interval:]))
 
-                # TODO update to log to tensorboard, also 
+                # TODO update to log to tensorboard, also
 
 if __name__ == "__main__":
     train()
