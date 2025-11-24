@@ -42,7 +42,12 @@ class ResidualStack(nn.Module):
         super(ResidualStack, self).__init__()
         self.n_res_layers = n_res_layers
         self.stack = nn.ModuleList(
-            [ResidualLayer(in_dim, h_dim, res_h_dim)]*n_res_layers)
+
+            # Is this just making a multiple references to the same residual layer? So all weights shared?
+            # Anytime you see [Module()] * N that is a red flag because lists created with * duplicate references, not objects
+            # Holy shit it was right. All the IDs were the same!
+            # [ResidualLayer(in_dim, h_dim, res_h_dim)]*n_res_layers)
+            [ResidualLayer(in_dim, h_dim, res_h_dim) for i in range(n_res_layers)])
 
     def forward(self, x):
         for layer in self.stack:
@@ -57,9 +62,15 @@ if __name__ == "__main__":
     x = torch.tensor(x).float()
     # test Residual Layer
     res = ResidualLayer(40, 40, 20)
+
+
     res_out = res(x)
     print('Res Layer out shape:', res_out.shape)
     # test res stack
     res_stack = ResidualStack(40, 40, 20, 3)
+
+    for i, layer in enumerate(res_stack.stack):
+        print(f"Layer {i} has id {id(layer)}")
     res_stack_out = res_stack(x)
     print('Res Stack out shape:', res_stack_out.shape)
+

@@ -6,7 +6,7 @@ from torchvision import datasets, transforms
 import numpy as np
 from torchvision.utils import save_image
 import time
-import os 
+import os
 import sys
 """
 add vqvae and pixelcnn dirs to path
@@ -17,15 +17,17 @@ pixelcnn_dir = sys.path.append(os.getcwd()+ '/pixelcnn')
 
 from pixelcnn.models import GatedPixelCNN
 import utils
-
+from torch.utils.tensorboard import SummaryWriter
 """
 Hyperparameters
 """
-import argparse 
+import argparse
+
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--batch_size", type=int, default=32)
-parser.add_argument("--epochs", type=int, default=100)
+parser.add_argument("--epochs", type=int, default=20)
 parser.add_argument("--log_interval", type=int, default=100)
 parser.add_argument("-save", action="store_true")
 parser.add_argument("-gen_samples", action="store_true")
@@ -41,9 +43,17 @@ parser.add_argument("--n_embeddings", type=int, default=512,
 parser.add_argument("--n_layers", type=int, default=15)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 
+parser.add_argument('--use_tb', action='store_true', default=True, help='Enable TensorBoard logging')
+parser.add_argument('--tb_logdir', type=str, default='results/pixelcnn', help='TensorBoard log directory')
+
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+writer = None
+current_epoch = 0
+if args.use_tb:
+    writer = SummaryWriter(log_dir=args.tb_logdir)
 
 """
 data loaders
@@ -79,14 +89,16 @@ def train():
     train_loss = []
     for batch_idx, (x, label) in enumerate(train_loader):
         start_time = time.time()
-        
+
         if args.dataset == 'LATENT_BLOCK':
-            x = (x[:, 0]).cuda()
+            # ensure integer class indices are LongTensor for CrossEntropyLoss
+            x = (x[:, 0]).long().cuda()
         else:
-            x = (x[:, 0] * (K-1)).long().cuda()
+            # scale floating images to class indices and convert to long
+            x = (x[:, 0] * (args.n_embeddings-1)).long().cuda()
         label = label.cuda()
-       
-    
+
+
         # Train PixelCNN with images
         logits = model(x, label)
         logits = logits.permute(0, 2, 3, 1).contiguous()
@@ -102,14 +114,23 @@ def train():
 
         train_loss.append(loss.item())
 
+
         if (batch_idx + 1) % args.log_interval == 0:
             print('\tIter: [{}/{} ({:.0f}%)]\tLoss: {} Time: {}'.format(
-                batch_idx * len(x), len(train_loader.dataset),
+                batch_idx * len(x),
+                len(train_loader.dataset),
                 args.log_interval * batch_idx / len(train_loader),
                 np.asarray(train_loss)[-args.log_interval:].mean(0),
                 time.time() - start_time
             ))
 
+    # Need the global keyword when writing to a global variable (not when reading)
+    # Take the mean across the batches
+    train_mean = np.asarray(train_loss).mean(0)
+    global current_epoch
+    current_epoch += 1
+    if writer is not None:
+        writer.add_scalar('train/loss', float(train_mean), current_epoch)
 
 def test():
     start_time = time.time()
@@ -117,53 +138,83 @@ def test():
     with torch.no_grad():
         for batch_idx, (x, label) in enumerate(test_loader):
             if args.dataset == 'LATENT_BLOCK':
-                x = (x[:, 0]).cuda()
+                x = (x[:, 0]).long().cuda()
             else:
                 x = (x[:, 0] * (args.n_embeddings-1)).long().cuda()
             label = label.cuda()
 
             logits = model(x, label)
-            
-            
+
+
             logits = logits.permute(0, 2, 3, 1).contiguous()
             loss = criterion(
                 logits.view(-1, args.n_embeddings),
                 x.view(-1)
             )
-            
+
             val_loss.append(loss.item())
 
+    val_mean = np.asarray(val_loss).mean(0)
     print('Validation Completed!\tLoss: {} Time: {}'.format(
-        np.asarray(val_loss).mean(0),
+        val_mean,
         time.time() - start_time
     ))
-    return np.asarray(val_loss).mean(0)
+
+    # TensorBoard: log validation loss per epoch
+    global current_epoch
+    if writer is not None:
+        writer.add_scalar('val/loss', float(val_mean), current_epoch)
+
+    return val_mean
 
 
 def generate_samples(epoch):
+
+    # View (-1) flattens the 10x10 matrix
     label = torch.arange(10).expand(10, 10).contiguous().view(-1)
     label = label.long().cuda()
 
+    # shape = (8,8), batch_size = 100
     x_tilde = model.generate(label, shape=(args.img_dim,args.img_dim), batch_size=100)
-    
+
     print(x_tilde[0])
+    return x_tilde # shape=(100,8,8)
 
 
 
-BEST_LOSS = 999
-LAST_SAVED = -1
-for epoch in range(1, args.epochs):
-    print("\nEpoch {}:".format(epoch))
-    train()
-    cur_loss = test()
+def main():
 
-    if args.save or cur_loss <= BEST_LOSS:
-        BEST_LOSS = cur_loss
-        LAST_SAVED = epoch
+    BEST_LOSS = 999
+    LAST_SAVED = -1
+    for epoch in range(1, args.epochs):
+        print("\nEpoch {}:".format(epoch))
+        # set epoch for tensorboard logging
+        global current_epoch
+        current_epoch = epoch
 
-        print("Saving model!")
-        torch.save(model.state_dict(), 'results/{}_pixelcnn.pt'.format(args.dataset))
-    else:
-        print("Not saving model! Last saved: {}".format(LAST_SAVED))
-    if args.gen_samples:
-        generate_samples(epoch)
+        # Train and test on each epoch to get loss curves
+        train()
+        cur_loss = test()
+
+        if args.save or cur_loss <= BEST_LOSS:
+            BEST_LOSS = cur_loss
+            LAST_SAVED = epoch
+
+            print("Saving model!")
+            torch.save(model.state_dict(), 'results/{}_pixelcnn.pt'.format(args.dataset))
+            if args.gen_samples:
+                samples = generate_samples(epoch)
+                data_path = os.getcwd() + f'/data/latent_samples_epoch{epoch}.npy'
+                np.save(data_path, samples.cpu().numpy())
+        else:
+            print("Not saving model! Last saved: {}".format(LAST_SAVED))
+        if args.gen_samples:
+            generate_samples(epoch)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        if writer is not None:
+            writer.close()

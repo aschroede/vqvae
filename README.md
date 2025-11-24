@@ -52,9 +52,9 @@ To sample from the latent space, we fit a PixelCNN over the latent pixel values 
 
 To train the PixelCNN on latent representations, you first need to follow these steps:
 
-1. Train the VQ VAE on your dataset of choice
+1. Train the VQ VAE on your dataset of choice # Default is CIFAR10
 2. Use saved VQ VAE parameters to encode your dataset and save discrete latent space representations with `np.save` API. In the `quantizer.py` this is the `min_encoding_indices` variable. 
-3. Specify path to your saved latent space dataset in `utils.load_latent_block` function.
+3. Specify path to your saved latent space dataset in `utils.load_latent_block` function. (This should be in ./data/latent_e_indices.npy but not there...)
 4. Run the PixelCNN script
 
 To run the PixelCNN, simply type 
@@ -62,3 +62,5 @@ To run the PixelCNN, simply type
 `python pixelcnn/gated_pixelcnn.py`
 
 as well as any parameters (see the argparse statements). The default dataset is `LATENT_BLOCK` which will only work if you have trained your VQ VAE and saved the latent representations.
+
+I have trained the VQ-VAE but havn't saved the latent representations...

@@ -8,6 +8,7 @@ class BlockDataset(Dataset):
     Creates block dataset of 32X32 images with 3 channels
     requires numpy and cv2 to work
     """
+    # TODO: what is a block dataset?
 
     def __init__(self, file_path, train=True, transform=None):
         print('Loading block data')

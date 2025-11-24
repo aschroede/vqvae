@@ -11,16 +11,18 @@ import numpy as np
 def load_cifar():
     train = datasets.CIFAR10(root="data", train=True, download=True,
                              transform=transforms.Compose([
-                                 transforms.ToTensor(),
+                                 transforms.ToTensor(), # ToTensor() maps [0, 255] -> [0, 1]
+                                 # The first list of three (0.5, 0.5, 0.5) are the means for each channel
+                                 # And the second are the standard deviation - don't you usally want mean of 0 and std = 1?
                                  transforms.Normalize(
-                                     (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                     (0.5, 0.5, 0.5), (1, 1, 1))
                              ]))
 
     val = datasets.CIFAR10(root="data", train=False, download=True,
                            transform=transforms.Compose([
                                transforms.ToTensor(),
                                transforms.Normalize(
-                                   (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                   (0.5, 0.5, 0.5), (1, 1, 1))
                            ]))
     return train, val
 
@@ -74,9 +76,11 @@ def data_loaders(train_data, val_data, batch_size):
 def load_data_and_data_loaders(dataset, batch_size):
     if dataset == 'CIFAR10':
         training_data, validation_data = load_cifar()
-        training_loader, validation_loader = data_loaders(
-            training_data, validation_data, batch_size)
-        x_train_var = np.var(training_data.train_data / 255.0)
+        training_loader, validation_loader = data_loaders(training_data, validation_data, batch_size)
+        
+        # Is this the normalization? No this is just the variance
+        # TODO: double check this -> But training_data.data is already in range [-0.5, 0.5]
+        x_train_var = np.var(training_data.data / 255.0)
 
     elif dataset == 'BLOCK':
         training_data, validation_data = load_block()

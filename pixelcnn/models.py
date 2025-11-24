@@ -127,12 +127,19 @@ class GatedPixelCNN(nn.Module):
         return self.output_conv(x_h)
 
     def generate(self, label, shape=(8, 8), batch_size=64):
+        """
+        Params
+            label: labels of the image to generate
+        """
         param = next(self.parameters())
+
+        # shape of x = (100, 8, 8)
         x = torch.zeros(
             (batch_size, *shape),
             dtype=torch.int64, device=param.device
         )
 
+        # Build up the 8x8 incrementally
         for i in range(shape[0]):
             for j in range(shape[1]):
                 logits = self.forward(x, label)

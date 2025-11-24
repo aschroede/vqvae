@@ -23,17 +23,26 @@ class VectorQuantizer(nn.Module):
         self.e_dim = e_dim
         self.beta = beta
 
+
+        # What is this embedding for? And the embedding weights?
+        # Oh this is literally the codebook! And the weights are the weights of the codebook
         self.embedding = nn.Embedding(self.n_e, self.e_dim)
         self.embedding.weight.data.uniform_(-1.0 / self.n_e, 1.0 / self.n_e)
 
     def forward(self, z):
         """
-        Inputs the output of the encoder network z and maps it to a discrete 
+        Inputs the output of the encoder network z and maps it to a discrete
         one-hot vector that is the index of the closest embedding vector e_j
 
         z (continuous) -> z_q (discrete)
 
         z.shape = (batch, channel, height, width)
+
+        Terms
+
+        1. z: output of the encoder network  (z_e(x) in paper) -> z_e(x) in loss equation
+        2. z_q: input to the decoder network  (z_q(x) = e_k in paper) -> e in loss equation
+
 
         quantization pipeline:
 
@@ -60,8 +69,15 @@ class VectorQuantizer(nn.Module):
         z_q = torch.matmul(min_encodings, self.embedding.weight).view(z.shape)
 
         # compute loss for embedding
-        loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
-            torch.mean((z_q - z.detach()) ** 2)
+
+        # Original loss term was incorrect (detach was swapped)
+        # loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
+        # torch.mean((z_q - z.detach()) ** 2)
+
+        # Corrected loss term
+        codebook_loss = torch.mean((z.detach() - z_q)**2)
+        commitment_loss = self.beta*torch.mean((z - z_q.detach())**2)
+        loss = codebook_loss + commitment_loss
 
         # preserve gradients
         z_q = z + (z_q - z).detach()
